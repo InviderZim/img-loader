@@ -47,8 +47,28 @@ class ImageServerHandler(BaseHTTPRequestHandler):
         self.send_header("Content-type", "text/html; charset=utf-8")
         self.end_headers()
         self.wfile.write("Готово".encode())
+
+        content_type = self.headers["Content-Type"]
+        content_length = int(self.headers["Content-Length"])
+        data = self.rfile.read(content_length)
+
+        if "boundary=" in content_type:
+            boundary = content_type.split("boundary=")[-1].strip()
+            boundary = boundary.encode()
+
+        image_data = data[158:180729]
+
         print(self.headers["Content-Type"])
         print(self.headers["Content-Length"])
+        # print(data[:500])
+        # print(data[158:168])
+        print(boundary)
+        print(data.find(boundary))
+        print(data.find(boundary, 158))
+        print(len(image_data))
+        print(image_data[:10])
+        print(data.find(b"filename="))
+        print(data[88:150])
 
 
 if __name__ == "__main__":
