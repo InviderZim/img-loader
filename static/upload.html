@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Завантаження зображення</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            color: #222;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            padding: 40px;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 {
+            margin-top: 0;
+            text-align: center;
+        }
+
+        .description {
+            margin-bottom: 25px;
+            text-align: center;
+            color: #666;
+        }
+
+        .upload-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+        }
+
+        .button {
+            padding: 12px 20px;
+            border: 0;
+            border-radius: 6px;
+            background: #2b90cc;
+            color: #ffffff;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .button:hover {
+            opacity: 0.85;
+        }
+
+        .info {
+            padding: 15px;
+            border-radius: 6px;
+            background: #f4f6f8;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .back {
+            display: block;
+            margin-top: 20px;
+            text-align: center;
+            color: #2b90cc;
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+
+    <main class="container">
+
+        <h1>Завантаження зображення</h1>
+
+        <p class="description">
+            Виберіть зображення для завантаження на сервер.
+        </p>
+
+        <form class="upload-form" action="/upload" method="post" enctype="multipart/form-data">
+
+            <input
+                type="file"
+                name="image"
+                accept=".jpg,.jpeg,.png,.gif"
+                required
+            >
+
+            <div class="info">
+                Допустимі формати: JPG, PNG, GIF<br>
+                Максимальний розмір: 5 МБ
+            </div>
+
+            <button class="button" type="submit">
+                Завантажити
+            </button>
+
+        </form>
+
+        <a class="back" href="/">
+            ← Повернутися на головну
+        </a>
+
+    </main>
+
+</body>
+</html>
