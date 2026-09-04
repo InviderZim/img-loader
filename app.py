@@ -1,6 +1,6 @@
+import logging
 import os
 import uuid
-from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 IMAGE_DIR = os.environ.get("IMAGE_DIR", "images")
@@ -15,12 +15,14 @@ with open("static/upload.html", "r", encoding="utf-8") as file:
 with open("static/images.html", "r", encoding="utf-8") as file:
     images = file.read()
 
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.INFO,
+    format="[%(asctime)s] Дія: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
-def log_action(message):
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    with open(LOG_FILE, "a", encoding="utf-8") as file:
-        file.write(f"[{current_time}] Дія: {message}\n")
+logger = logging.getLogger(__name__)
 
 
 class ImageServerHandler(BaseHTTPRequestHandler):
@@ -31,7 +33,7 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
             self.send_html(html)
-            log_action("Відкрито головну сторінку")
+            logger.info("Відкрито головну сторінку")
 
         elif self.path == "/upload":
             self.send_response(200)
@@ -39,7 +41,7 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
             self.send_html(upload)
-            log_action("Відкрито сторінку завантаження")
+            logger.info("Відкрито сторінку завантаження")
 
         elif self.path == "/images/":
             self.send_response(200)
@@ -68,10 +70,18 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             )
 
             self.send_html(gallery_html)
-            log_action("Відкрито галерею зображень")
+            logger.info("Відкрито галерею зображень")
 
         elif self.path.startswith("/images/"):
             filename = self.path[len("/images/") :]
+
+            if os.path.basename(filename) != filename:
+                self.send_response(400)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write("Недопустиме ім'я файлу".encode())
+                return
+
             extension = filename.split(".")[-1]
 
             if extension not in ("jpg", "png", "gif"):
@@ -95,7 +105,7 @@ class ImageServerHandler(BaseHTTPRequestHandler):
                 self.send_header("Content-Type", "text/plain; charset=utf-8")
                 self.end_headers()
                 self.wfile.write("Файл не знайдено".encode())
-                log_action(f"Файл не знайдено: {filename}")
+                logger.info(f"Файл не знайдено: {filename}")
                 return
 
             self.send_response(200)
@@ -108,7 +118,7 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             self.send_header("Content-type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write("Помилка 404: Сторінка не знайдена".encode())
-            log_action(f"Помилка 404: {self.path}")
+            logger.info(f"Помилка 404: {self.path}")
 
     def send_html(self, html):
         return self.wfile.write(html.encode("utf-8"))
@@ -130,7 +140,7 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
             self.wfile.write("Недопустиме розширення файлу".encode())
-            log_action(f"Спроба завантаження недопустимого файлу: {filename}")
+            logger.info(f"Спроба завантаження недопустимого файлу: {filename}")
             return
 
         if "boundary=" in content_type:
@@ -150,13 +160,13 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
             self.wfile.write("Файл завеликий. Максимальний розмір — 5 МБ".encode())
-            log_action(f"Спроба завантаження завеликого файлу: {filename}")
+            logger.info(f"Спроба завантаження завеликого файлу: {filename}")
             return
 
         with open(IMAGE_DIR + "/" + unique_name, "wb") as file:
             file.write(image_data)
 
-        log_action(f"Файл успішно завантажено: {unique_name}")
+        logger.info(f"Файл успішно завантажено: {unique_name}")
 
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
