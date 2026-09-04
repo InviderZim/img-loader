@@ -1,7 +1,10 @@
 import os
 import uuid
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+IMAGE_DIR = os.environ.get("IMAGE_DIR", "images")
+LOG_FILE = os.environ.get("LOG_FILE", "logs/app.log")
 
 with open("static/index.html", "r", encoding="utf-8") as file:
     html = file.read()
@@ -16,7 +19,7 @@ with open("static/images.html", "r", encoding="utf-8") as file:
 def log_action(message):
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    with open("logs/app.log", "a", encoding="utf-8") as file:
+    with open(LOG_FILE, "a", encoding="utf-8") as file:
         file.write(f"[{current_time}] Дія: {message}\n")
 
 
@@ -28,6 +31,7 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
             self.send_html(html)
+            log_action("Відкрито головну сторінку")
 
         elif self.path == "/upload":
             self.send_response(200)
@@ -35,15 +39,16 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
             self.send_html(upload)
+            log_action("Відкрито сторінку завантаження")
 
         elif self.path == "/images/":
             self.send_response(200)
             self.send_header("Content-type", "text/html; charset=utf-8")
             self.end_headers()
 
-            files = os.listdir("images")
+            files = os.listdir(IMAGE_DIR)
 
-            html = ""
+            gallery_html = ""
 
             for file in files:
                 card = '<div class="image-card">'
@@ -53,16 +58,17 @@ class ImageServerHandler(BaseHTTPRequestHandler):
                 card += '<div class="image-name">' + file + "</div>"
                 card += "</div>"
 
-                html += card
+                gallery_html += card
 
             gallery_html = images.replace(
                 '<section class="gallery">\n\n        </section>',
                 '<section class="gallery">\n\n        '
-                + html
+                + gallery_html
                 + "\n\n        </section>",
             )
 
             self.send_html(gallery_html)
+            log_action("Відкрито галерею зображень")
 
         elif self.path.startswith("/images/"):
             filename = self.path[len("/images/") :]
@@ -82,13 +88,14 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             }
 
             try:
-                with open("images/" + filename, "rb") as file:
+                with open(IMAGE_DIR + "/" + filename, "rb") as file:
                     image_data = file.read()
             except FileNotFoundError:
                 self.send_response(404)
                 self.send_header("Content-Type", "text/plain; charset=utf-8")
                 self.end_headers()
                 self.wfile.write("Файл не знайдено".encode())
+                log_action(f"Файл не знайдено: {filename}")
                 return
 
             self.send_response(200)
@@ -101,6 +108,7 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             self.send_header("Content-type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write("Помилка 404: Сторінка не знайдена".encode())
+            log_action(f"Помилка 404: {self.path}")
 
     def send_html(self, html):
         return self.wfile.write(html.encode("utf-8"))
@@ -115,13 +123,14 @@ class ImageServerHandler(BaseHTTPRequestHandler):
 
         filename = data[data_start:data_end].decode("utf-8")
 
-        extension = filename.split(".")[-1]
+        extension = filename.split(".")[-1].lower()
 
         if extension not in ("jpg", "png", "gif"):
             self.send_response(400)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
             self.wfile.write("Недопустиме розширення файлу".encode())
+            log_action(f"Спроба завантаження недопустимого файлу: {filename}")
             return
 
         if "boundary=" in content_type:
@@ -141,10 +150,13 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.end_headers()
             self.wfile.write("Файл завеликий. Максимальний розмір — 5 МБ".encode())
+            log_action(f"Спроба завантаження завеликого файлу: {filename}")
             return
 
-        with open("images/" + unique_name, "wb") as file:
+        with open(IMAGE_DIR + "/" + unique_name, "wb") as file:
             file.write(image_data)
+
+        log_action(f"Файл успішно завантажено: {unique_name}")
 
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -156,9 +168,7 @@ class ImageServerHandler(BaseHTTPRequestHandler):
         self.wfile.write(message.encode("utf-8"))
 
 
-log_action("Тестове повідомлення")
-
 if __name__ == "__main__":
-    server = HTTPServer(("0.0.0.0", 8000), ImageServerHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", 8000), ImageServerHandler)
     print("Server running on http://localhost:8000")
     server.serve_forever()
