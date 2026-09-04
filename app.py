@@ -1,4 +1,6 @@
+import os
 import uuid
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 with open("static/index.html", "r", encoding="utf-8") as file:
@@ -9,6 +11,13 @@ with open("static/upload.html", "r", encoding="utf-8") as file:
 
 with open("static/images.html", "r", encoding="utf-8") as file:
     images = file.read()
+
+
+def log_action(message):
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    with open("logs/app.log", "a", encoding="utf-8") as file:
+        file.write(f"[{current_time}] Дія: {message}\n")
 
 
 class ImageServerHandler(BaseHTTPRequestHandler):
@@ -32,7 +41,28 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             self.send_header("Content-type", "text/html; charset=utf-8")
             self.end_headers()
 
-            self.send_html(images)
+            files = os.listdir("images")
+
+            html = ""
+
+            for file in files:
+                card = '<div class="image-card">'
+                card += '<a href="/images/' + file + '">'
+                card += '<img src="/images/' + file + '">'
+                card += "</a>"
+                card += '<div class="image-name">' + file + "</div>"
+                card += "</div>"
+
+                html += card
+
+            gallery_html = images.replace(
+                '<section class="gallery">\n\n        </section>',
+                '<section class="gallery">\n\n        '
+                + html
+                + "\n\n        </section>",
+            )
+
+            self.send_html(gallery_html)
 
         elif self.path.startswith("/images/"):
             filename = self.path[len("/images/") :]
@@ -50,8 +80,6 @@ class ImageServerHandler(BaseHTTPRequestHandler):
                 "png": "image/png",
                 "gif": "image/gif",
             }
-            print(extension)
-            print(filename)
 
             try:
                 with open("images/" + filename, "rb") as file:
@@ -62,8 +90,6 @@ class ImageServerHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write("Файл не знайдено".encode())
                 return
-
-            print(len(image_data))
 
             self.send_response(200)
             self.send_header("Content-type", content_types[extension])
@@ -77,10 +103,9 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             self.wfile.write("Помилка 404: Сторінка не знайдена".encode())
 
     def send_html(self, html):
-        return self.wfile.write(html.encode())
+        return self.wfile.write(html.encode("utf-8"))
 
     def do_POST(self):
-
         content_type = self.headers["Content-Type"]
         content_length = int(self.headers["Content-Length"])
         data = self.rfile.read(content_length)
@@ -91,6 +116,7 @@ class ImageServerHandler(BaseHTTPRequestHandler):
         filename = data[data_start:data_end].decode("utf-8")
 
         extension = filename.split(".")[-1]
+
         if extension not in ("jpg", "png", "gif"):
             self.send_response(400)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
@@ -109,7 +135,6 @@ class ImageServerHandler(BaseHTTPRequestHandler):
 
         unique_name = str(uuid.uuid4())
         unique_name = unique_name + "." + extension
-        print(unique_name)
 
         if len(image_data) > 5 * 1024 * 1024:
             self.send_response(400)
@@ -124,14 +149,14 @@ class ImageServerHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
+
         message = "Файл успішно завантажено\n"
         message += "http://localhost:8000/images/" + unique_name
 
         self.wfile.write(message.encode("utf-8"))
 
-        print(self.headers["Content-Type"])
-        print(self.headers["Content-Length"])
 
+log_action("Тестове повідомлення")
 
 if __name__ == "__main__":
     server = HTTPServer(("0.0.0.0", 8000), ImageServerHandler)
