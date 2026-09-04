@@ -1,3 +1,4 @@
+import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 with open("static/index.html", "r", encoding="utf-8") as file:
@@ -36,6 +37,14 @@ class ImageServerHandler(BaseHTTPRequestHandler):
         elif self.path.startswith("/images/"):
             filename = self.path[len("/images/") :]
             extension = filename.split(".")[-1]
+
+            if extension not in ("jpg", "png", "gif"):
+                self.send_response(400)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write("Недопустиме розширення файлу".encode())
+                return
+
             content_types = {
                 "jpg": "image/jpeg",
                 "png": "image/png",
@@ -71,10 +80,6 @@ class ImageServerHandler(BaseHTTPRequestHandler):
         return self.wfile.write(html.encode())
 
     def do_POST(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/html; charset=utf-8")
-        self.end_headers()
-        self.wfile.write("Готово".encode())
 
         content_type = self.headers["Content-Type"]
         content_length = int(self.headers["Content-Length"])
@@ -85,6 +90,14 @@ class ImageServerHandler(BaseHTTPRequestHandler):
 
         filename = data[data_start:data_end].decode("utf-8")
 
+        extension = filename.split(".")[-1]
+        if extension not in ("jpg", "png", "gif"):
+            self.send_response(400)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write("Недопустиме розширення файлу".encode())
+            return
+
         if "boundary=" in content_type:
             boundary = content_type.split("boundary=")[-1].strip()
             boundary = boundary.encode()
@@ -94,23 +107,30 @@ class ImageServerHandler(BaseHTTPRequestHandler):
 
         image_data = data[image_start:image_end]
 
-        with open("images/" + filename, "wb") as file:
+        unique_name = str(uuid.uuid4())
+        unique_name = unique_name + "." + extension
+        print(unique_name)
+
+        if len(image_data) > 5 * 1024 * 1024:
+            self.send_response(400)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write("Файл завеликий. Максимальний розмір — 5 МБ".encode())
+            return
+
+        with open("images/" + unique_name, "wb") as file:
             file.write(image_data)
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.end_headers()
+        message = "Файл успішно завантажено\n"
+        message += "http://localhost:8000/images/" + unique_name
+
+        self.wfile.write(message.encode("utf-8"))
 
         print(self.headers["Content-Type"])
         print(self.headers["Content-Length"])
-        # print(data[::-1])
-        # print(data[158:168])
-        # print(boundary)
-        # print(data.find(boundary))
-        # print(data.find(boundary, 158))
-        # print(len(image_data))
-        # print(image_data[:10])
-        # print(data.find(b"filename="))
-        # print(data[88:200])
-        # print(filename)
-        # print(len(image_data))
-        # print(image_data[:10])
 
 
 if __name__ == "__main__":
