@@ -6,8 +6,6 @@ services:
     environment:
       IMAGE_DIR: /images
       LOG_FILE: /logs/app.log
-    ports:
-      - "8000:8000"
     volumes:
       - images:/images
       - logs:/logs
