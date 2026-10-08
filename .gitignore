@@ -2,5 +2,7 @@
 __pycache__/
 *.pyc
 .vscode/
+.env
+.ruff_cache/
 images/
 logs/

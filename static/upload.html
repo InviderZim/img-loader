@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="uk">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Завантаження зображення</title>
+    <title>Upload Image</title>
 
     <style>
         * {
@@ -77,12 +77,40 @@
             font-size: 14px;
         }
 
-        .back {
-            display: block;
+        .result {
+            display: none;
             margin-top: 20px;
-            text-align: center;
+            padding: 15px;
+            border-radius: 6px;
+            background: #eaf7ee;
+            color: #256b3a;
+        }
+
+        .result a {
+            display: block;
+            margin-top: 8px;
             color: #2b90cc;
+            word-break: break-all;
+        }
+
+        .navigation {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .navigation a {
+            flex: 1;
+            padding: 12px 10px;
+            border-radius: 6px;
+            background: #2b90cc;
+            color: #ffffff;
+            text-align: center;
             text-decoration: none;
+        }
+
+        .navigation a:hover {
+            opacity: 0.85;
         }
     </style>
 </head>
@@ -91,10 +119,10 @@
 
     <main class="container">
 
-        <h1>Завантаження зображення</h1>
+        <h1>Upload Image</h1>
 
         <p class="description">
-            Виберіть зображення для завантаження на сервер.
+            Select an image to upload to the server.
         </p>
 
         <form class="upload-form" action="/upload" method="post" enctype="multipart/form-data">
@@ -107,21 +135,70 @@
             >
 
             <div class="info">
-                Допустимі формати: JPG, PNG, GIF<br>
-                Максимальний розмір: 5 МБ
+                Allowed formats: JPG, PNG, GIF<br>
+                Maximum size: 5 MB
             </div>
 
             <button class="button" type="submit">
-                Завантажити
+                Upload
             </button>
 
         </form>
 
-        <a class="back" href="/">
-            ← Повернутися на головну
-        </a>
+        <div class="result" id="upload-result">
+            <strong>File uploaded successfully</strong>
+            <a id="image-link" href="" target="_blank"></a>
+        </div>
+
+        <div class="navigation">
+            <a href="/">
+                ← Back to Home
+            </a>
+
+            <a href="/images/">
+                View Images
+            </a>
+        </div>
 
     </main>
+
+    <script>
+        const form = document.querySelector(".upload-form");
+        const result = document.querySelector("#upload-result");
+        const imageLink = document.querySelector("#image-link");
+
+        form.addEventListener("submit", async function (event) {
+            event.preventDefault();
+
+            const formData = new FormData(form);
+
+            const response = await fetch("/upload", {
+                method: "POST",
+                body: formData
+            });
+
+            const text = await response.text();
+
+            if (response.ok) {
+                const lines = text.trim().split("\n");
+                const filename = lines[lines.length - 1].split("/").pop();
+
+                const imageUrl = "/images/" + filename;
+
+                imageLink.href = imageUrl;
+                imageLink.textContent = window.location.origin + imageUrl;
+
+                result.style.display = "block";
+            } else {
+                result.style.display = "block";
+                result.style.background = "#fdecec";
+                result.style.color = "#a33";
+
+                imageLink.removeAttribute("href");
+                imageLink.textContent = text;
+            }
+        });
+    </script>
 
 </body>
 </html>

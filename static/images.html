@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="uk">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Зображення</title>
+    <title>Images</title>
 
     <style>
         * {
@@ -46,7 +46,7 @@
         .image-card {
             overflow: hidden;
             background: #ffffff;
-            border-radius: 10px;
+            border-radius: 12px;
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
         }
 
@@ -61,11 +61,71 @@
             object-fit: cover;
         }
 
+        .image-info {
+            padding: 15px;
+        }
+
         .image-name {
-            padding: 12px;
+            margin-bottom: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            color: #222;
+            word-break: break-word;
+        }
+
+        .image-meta {
+            display: grid;
+            gap: 6px;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .image-meta span {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .image-meta strong {
+            color: #333;
+        }
+
+        .delete-button {
+            display: block;
+            width: calc(100% - 30px);
+            margin: 0 15px 15px;
+            padding: 10px;
+            border: 0;
+            border-radius: 6px;
+            background: #d9534f;
+            color: #ffffff;
             font-size: 14px;
-            color: #555;
-            word-break: break-all;
+            cursor: pointer;
+        }
+
+        .delete-button:hover {
+            opacity: 0.85;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            margin-top: 30px;
+        }
+
+        .pagination a,
+        .pagination .disabled {
+            padding: 8px 16px;
+            text-decoration: none;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .pagination .disabled {
+            color: #999;
+            background: #eee;
         }
 
         .navigation {
@@ -94,10 +154,10 @@
 
     <main class="container">
 
-        <h1>Зображення</h1>
+        <h1>Images</h1>
 
         <p class="description">
-            Завантажені зображення
+            Uploaded images
         </p>
 
         <section class="gallery">
@@ -106,11 +166,11 @@
 
         <nav class="navigation">
             <a class="button" href="/">
-                ← Головна
+                ← Home
             </a>
 
             <a class="button" href="/upload">
-                Завантажити зображення
+                Upload Image
             </a>
         </nav>
 

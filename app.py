@@ -2,6 +2,9 @@ import logging
 import os
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
+
+import psycopg2
 
 IMAGE_DIR = os.environ.get("IMAGE_DIR", "images")
 LOG_FILE = os.environ.get("LOG_FILE", "logs/app.log")
@@ -25,6 +28,98 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def get_db_connection():
+    return psycopg2.connect(
+        dbname=os.environ["DB_NAME"],
+        user=os.environ["DB_USER"],
+        password=os.environ["DB_PASSWORD"],
+        host=os.environ["DB_HOST"],
+        port=os.environ["DB_PORT"],
+    )
+
+
+def create_images_table():
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS images (
+            id SERIAL PRIMARY KEY,
+            filename TEXT NOT NULL,
+            original_name TEXT NOT NULL,
+            size INTEGER NOT NULL,
+            upload_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            file_type TEXT NOT NULL
+        )
+    """)
+
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+
+def get_images(page):
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    offset = (page - 1) * 10
+
+    cursor.execute(
+        """
+        SELECT id, filename, original_name, size, upload_time, file_type
+        FROM images
+        ORDER BY upload_time DESC
+        LIMIT 10 OFFSET %s
+        """,
+        (offset,),
+    )
+
+    images = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return images
+
+
+def get_image_by_id(image_id):
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT filename
+        FROM images
+        WHERE id = %s
+        """,
+        (image_id,),
+    )
+
+    image = cursor.fetchone()
+
+    cursor.close()
+    connection.close()
+
+    return image
+
+
+def get_images_count():
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM images
+        """)
+
+    count = cursor.fetchone()[0]
+
+    cursor.close()
+    connection.close()
+
+    return count
+
+
 class ImageServerHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/":
@@ -43,30 +138,113 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             self.send_html(upload)
             logger.info("Відкрито сторінку завантаження")
 
-        elif self.path == "/images/":
+        elif self.path == "/images/" or self.path.startswith("/images/?"):
+            parsed_url = urlparse(self.path)
+            query_params = parse_qs(parsed_url.query)
+
+            page = int(query_params.get("page", ["1"])[0])
+
+            page = max(page, 1)
+
             self.send_response(200)
             self.send_header("Content-type", "text/html; charset=utf-8")
             self.end_headers()
 
-            files = os.listdir(IMAGE_DIR)
+            images_count = get_images_count()
+
+            total_pages = (images_count + 9) // 10
+
+            if total_pages == 0:
+                total_pages = 1
+
+            page = min(page, total_pages)
+
+            images_data = get_images(page)
 
             gallery_html = ""
 
-            for file in files:
-                card = '<div class="image-card">'
-                card += '<a href="/images/' + file + '">'
-                card += '<img src="/images/' + file + '">'
-                card += "</a>"
-                card += '<div class="image-name">' + file + "</div>"
-                card += "</div>"
+            if images_data:
+                for image in images_data:
+                    image_id = image[0]
+                    filename = image[1]
+                    original_name = image[2]
+                    size = image[3]
+                    upload_time = image[4]
+                    file_type = image[5]
 
-                gallery_html += card
+                    size_kb = round(size / 1024, 2)
+
+                    gallery_html += '<div class="image-card">'
+
+                    gallery_html += '<a href="/images/' + filename + '">'
+                    gallery_html += '<img src="/images/' + filename + '">'
+                    gallery_html += "</a>"
+
+                    gallery_html += '<div class="image-info">'
+
+                    gallery_html += '<div class="image-name">'
+                    gallery_html += original_name
+                    gallery_html += "</div>"
+
+                    gallery_html += '<div class="image-meta">'
+
+                    gallery_html += "<span>"
+                    gallery_html += "<strong>Size:</strong>"
+                    gallery_html += str(size_kb) + " KB"
+                    gallery_html += "</span>"
+
+                    gallery_html += "<span>"
+                    gallery_html += "<strong>Uploaded:</strong>"
+                    gallery_html += str(upload_time)
+                    gallery_html += "</span>"
+
+                    gallery_html += "<span>"
+                    gallery_html += "<strong>Type:</strong>"
+                    gallery_html += file_type
+                    gallery_html += "</span>"
+
+                    gallery_html += "</div>"
+                    gallery_html += "</div>"
+
+                    gallery_html += (
+                        '<a class="delete-button" href="/delete/' + str(image_id) + '">'
+                    )
+                    gallery_html += "Delete"
+                    gallery_html += "</a>"
+
+                    gallery_html += "</div>"
+
+            if not images_data:
+                gallery_html = "<p>No uploaded images</p>"
+
+            pagination_html = '<div class="pagination">'
+
+            if page > 1:
+                pagination_html += (
+                    '<a href="/images/?page=' + str(page - 1) + '">Previous</a>'
+                )
+            else:
+                pagination_html += '<span class="disabled">Previous</span>'
+
+            pagination_html += (
+                "<span>Page " + str(page) + " of " + str(total_pages) + "</span>"
+            )
+
+            if page < total_pages:
+                pagination_html += (
+                    '<a href="/images/?page=' + str(page + 1) + '">Next</a>'
+                )
+            else:
+                pagination_html += '<span class="disabled">Next</span>'
+
+            pagination_html += "</div>"
 
             gallery_html = images.replace(
                 '<section class="gallery">\n\n        </section>',
                 '<section class="gallery">\n\n        '
                 + gallery_html
-                + "\n\n        </section>",
+                + "\n\n        </section>\n\n        "
+                + pagination_html,
             )
 
             self.send_html(gallery_html)
@@ -112,6 +290,58 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             self.send_header("Content-type", content_types[extension])
             self.end_headers()
             self.wfile.write(image_data)
+
+        elif self.path.startswith("/delete/"):
+            image_id = self.path[len("/delete/") :]
+
+            try:
+                image_id = int(image_id)
+            except ValueError:
+                self.send_response(400)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write("Недопустимий ID".encode())
+                logger.info(f"Недопустимий ID для видалення: {image_id}")
+                return
+
+            image = get_image_by_id(image_id)
+
+            if image is None:
+                self.send_response(404)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write("Зображення не знайдено".encode())
+                logger.info(f"Зображення не знайдено для видалення: {image_id}")
+                return
+
+            filename = image[0]
+            file_path = IMAGE_DIR + "/" + filename
+
+            try:
+                os.remove(file_path)
+            except FileNotFoundError:
+                logger.info(f"Файл не знайдено під час видалення: {filename}")
+
+            connection = get_db_connection()
+            cursor = connection.cursor()
+
+            cursor.execute(
+                """
+                DELETE FROM images
+                WHERE id = %s
+                """,
+                (image_id,),
+            )
+
+            connection.commit()
+            cursor.close()
+            connection.close()
+
+            logger.info(f"Зображення видалено: {filename}")
+
+            self.send_response(302)
+            self.send_header("Location", "/images/")
+            self.end_headers()
 
         else:
             self.send_response(404)
@@ -163,8 +393,48 @@ class ImageServerHandler(BaseHTTPRequestHandler):
             logger.info(f"Спроба завантаження завеликого файлу: {filename}")
             return
 
-        with open(IMAGE_DIR + "/" + unique_name, "wb") as file:
+        file_path = IMAGE_DIR + "/" + unique_name
+
+        with open(file_path, "wb") as file:
             file.write(image_data)
+
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor()
+
+            cursor.execute(
+                """
+                INSERT INTO images (filename, original_name, size, file_type)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (unique_name, filename, len(image_data), extension),
+            )
+
+            connection.commit()
+
+        except Exception:
+            if "connection" in locals():
+                connection.rollback()
+
+            if "cursor" in locals():
+                cursor.close()
+
+            if "connection" in locals():
+                connection.close()
+
+            os.remove(file_path)
+
+            logger.error(f"Помилка збереження в БД: {unique_name}")
+
+            self.send_response(500)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.end_headers()
+            self.wfile.write("Помилка збереження зображення".encode())
+            return
+
+        else:
+            cursor.close()
+            connection.close()
 
         logger.info(f"Файл успішно завантажено: {unique_name}")
 
@@ -172,13 +442,20 @@ class ImageServerHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.end_headers()
 
-        message = "Файл успішно завантажено\n"
-        message += "http://localhost:8000/images/" + unique_name
+        message = "File uploaded successfully\n"
+        message += "/images/" + unique_name
 
         self.wfile.write(message.encode("utf-8"))
 
 
+try:
+    create_images_table()
+    print("Database table is ready")
+except psycopg2.Error as error:
+    print(f"Database initialization failed: {error}")
+
+
 if __name__ == "__main__":
     server = ThreadingHTTPServer(("0.0.0.0", 8000), ImageServerHandler)
-    print("Server running on http://localhost:8000")
+    print("Server running on port 8000")
     server.serve_forever()
