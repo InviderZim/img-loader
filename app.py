@@ -1,7 +1,9 @@
 import html as html_lib
 import logging
 import os
+import subprocess
 import uuid
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -37,6 +39,49 @@ def get_db_connection():
         host=os.environ["DB_HOST"],
         port=os.environ["DB_PORT"],
     )
+
+
+def create_backup():
+    backup_dir = "/backups"
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    backup_filename = f"backup_{timestamp}.sql"
+    backup_path = os.path.join(backup_dir, backup_filename)
+
+    env = os.environ.copy()
+    env["PGPASSWORD"] = os.environ["DB_PASSWORD"]
+
+    try:
+        os.makedirs(backup_dir, exist_ok=True)
+
+        with open(backup_path, "wb") as backup_file:
+            subprocess.run(
+                [
+                    "pg_dump",
+                    "-h",
+                    os.environ["DB_HOST"],
+                    "-p",
+                    os.environ["DB_PORT"],
+                    "-U",
+                    os.environ["DB_USER"],
+                    "-d",
+                    os.environ["DB_NAME"],
+                ],
+                stdout=backup_file,
+                stderr=subprocess.PIPE,
+                env=env,
+                check=True,
+            )
+
+        logger.info(f"Резервну копію створено: {backup_filename}")
+        return backup_filename
+
+    except Exception:
+        if os.path.exists(backup_path):
+            os.remove(backup_path)
+
+        logger.exception("Помилка створення резервної копії")
+        raise
 
 
 def create_images_table():
@@ -130,6 +175,24 @@ class ImageServerHandler(BaseHTTPRequestHandler):
 
             self.send_html(html)
             logger.info("Відкрито головну сторінку")
+
+        elif self.path == "/backup":
+            try:
+                backup_filename = create_backup()
+
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+
+                message = f"Резервну копію створено: {backup_filename}"
+                self.wfile.write(message.encode("utf-8"))
+
+            except Exception:
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+
+                self.wfile.write("Помилка створення резервної копії".encode())
 
         elif self.path == "/upload":
             self.send_response(200)
