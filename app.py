@@ -1,3 +1,4 @@
+import html as html_lib
 import logging
 import os
 import uuid
@@ -183,7 +184,7 @@ class ImageServerHandler(BaseHTTPRequestHandler):
                     gallery_html += '<div class="image-info">'
 
                     gallery_html += '<div class="image-name">'
-                    gallery_html += original_name
+                    gallery_html += html_lib.escape(original_name)
                     gallery_html += "</div>"
 
                     gallery_html += '<div class="image-meta">'
@@ -304,44 +305,79 @@ class ImageServerHandler(BaseHTTPRequestHandler):
                 logger.info(f"Недопустимий ID для видалення: {image_id}")
                 return
 
-            image = get_image_by_id(image_id)
-
-            if image is None:
-                self.send_response(404)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
-                self.end_headers()
-                self.wfile.write("Зображення не знайдено".encode())
-                logger.info(f"Зображення не знайдено для видалення: {image_id}")
-                return
-
-            filename = image[0]
-            file_path = IMAGE_DIR + "/" + filename
+            connection = None
+            cursor = None
 
             try:
-                os.remove(file_path)
-            except FileNotFoundError:
-                logger.info(f"Файл не знайдено під час видалення: {filename}")
+                connection = get_db_connection()
+                cursor = connection.cursor()
 
-            connection = get_db_connection()
-            cursor = connection.cursor()
+                cursor.execute(
+                    """
+                    SELECT filename
+                    FROM images
+                    WHERE id = %s
+                    FOR UPDATE
+                    """,
+                    (image_id,),
+                )
 
-            cursor.execute(
-                """
-                DELETE FROM images
-                WHERE id = %s
-                """,
-                (image_id,),
-            )
+                image = cursor.fetchone()
 
-            connection.commit()
-            cursor.close()
-            connection.close()
+                if image is None:
+                    connection.rollback()
 
-            logger.info(f"Зображення видалено: {filename}")
+                    self.send_response(404)
+                    self.send_header("Content-Type", "text/plain; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write("Зображення не знайдено".encode())
+                    logger.info(f"Зображення не знайдено для видалення: {image_id}")
+                    return
 
-            self.send_response(302)
-            self.send_header("Location", "/images/")
-            self.end_headers()
+                filename = image[0]
+                file_path = os.path.join(IMAGE_DIR, filename)
+
+                cursor.execute(
+                    """
+                    DELETE FROM images
+                    WHERE id = %s
+                    """,
+                    (image_id,),
+                )
+
+                try:
+                    os.remove(file_path)
+                except FileNotFoundError:
+                    logger.warning(f"Файл не знайдено під час видалення: {filename}")
+                except OSError:
+                    connection.rollback()
+                    raise
+
+                connection.commit()
+
+                logger.info(f"Зображення видалено: {filename}")
+
+                self.send_response(302)
+                self.send_header("Location", "/images/")
+                self.end_headers()
+
+            except Exception:
+                if connection is not None:
+                    connection.rollback()
+
+                logger.exception(f"Помилка видалення зображення з ID: {image_id}")
+
+                self.send_response(500)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.end_headers()
+                self.wfile.write("Помилка видалення зображення".encode())
+
+            finally:
+                if cursor is not None:
+                    cursor.close()
+
+                if connection is not None:
+                    connection.close()
 
         else:
             self.send_response(404)
